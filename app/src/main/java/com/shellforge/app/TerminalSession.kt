@@ -110,23 +110,21 @@ class TerminalSession(
     }
 
     fun close() {
-        scope.launch {
-            try {
-                writer?.let { activeWriter ->
-                    synchronized(activeWriter) {
-                        activeWriter.write("exit")
-                        activeWriter.newLine()
-                        activeWriter.flush()
-                    }
+        try {
+            writer?.let { activeWriter ->
+                synchronized(activeWriter) {
+                    activeWriter.write("exit")
+                    activeWriter.newLine()
+                    activeWriter.flush()
                 }
-            } catch (_: Exception) {
-                // The shell may already have exited.
             }
-
-            process?.destroy()
-            process = null
-            writer = null
+        } catch (_: Exception) {
+            // The shell may already have exited.
         }
+
+        process?.destroy()
+        process = null
+        writer = null
     }
 
     fun dispose() {
