@@ -1,8 +1,16 @@
 package com.shellforge.app
 
+import android.Manifest
+import android.content.Intent
+import android.net.Uri
+import android.os.Build
 import android.os.Bundle
+import android.os.Environment
+import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -17,6 +25,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -35,27 +44,59 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.rememberCoroutineScope
 import java.io.File
 
 class MainActivity : ComponentActivity() {
+    fun hasStorageAccess(): Boolean {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            Environment.isExternalStorageManager()
+        } else {
+            ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.WRITE_EXTERNAL_STORAGE
+            ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        }
+    }
+
+    fun requestStorageAccess() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            val intent = Intent(
+                Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
+                Uri.parse("package:$packageName")
+            )
+            startActivity(intent)
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
             MaterialTheme {
-                ShellforgeTerminal(filesDir)
+                ShellforgeTerminal(this, filesDir)
             }
         }
     }
 }
 
 @Composable
-private fun ShellforgeTerminal(appFilesDir: File) {
+private fun ShellforgeTerminal(activity: MainActivity, appFilesDir: File) {
     val lines = remember { mutableStateListOf("Shellforge Terminal") }
     var command by remember { mutableStateOf("") }
+    var storageAccess by remember { mutableStateOf(activity.hasStorageAccess()) }
     val listState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val legacyStoragePermission = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) {
+        storageAccess = activity.hasStorageAccess()
+    }
     val homeDirectory = remember(appFilesDir) {
         File(appFilesDir, "home").apply { mkdirs() }
     }
@@ -65,6 +106,16 @@ private fun ShellforgeTerminal(appFilesDir: File) {
             onOutput = { output -> lines.add(output) },
             onExit = { }
         )
+    }
+
+    DisposableEffect(lifecycleOwner, activity) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                storageAccess = activity.hasStorageAccess()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
     LaunchedEffect(session) {
@@ -104,6 +155,21 @@ private fun ShellforgeTerminal(appFilesDir: File) {
                 fontSize = 20.sp,
                 fontFamily = FontFamily.Monospace
             )
+
+            Button(
+                onClick = {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                        activity.requestStorageAccess()
+                    } else {
+                        legacyStoragePermission.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                    }
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    if (storageAccess) "Storage access granted" else "Grant storage access"
+                )
+            }
 
             LazyColumn(
                 state = listState,
