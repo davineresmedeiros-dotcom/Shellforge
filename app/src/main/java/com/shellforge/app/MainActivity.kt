@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
@@ -20,6 +21,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -32,28 +35,63 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.launch
+import androidx.compose.runtime.rememberCoroutineScope
+import java.io.File
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
             MaterialTheme {
-                ShellforgeTerminal()
+                ShellforgeTerminal(filesDir)
             }
         }
     }
 }
 
 @Composable
-private fun ShellforgeTerminal() {
-    val lines = remember {
-        mutableStateListOf(
-            "Shellforge Terminal",
-            "Android app foundation loaded.",
-            "Ubuntu session is not connected yet."
+private fun ShellforgeTerminal(appFilesDir: File) {
+    val lines = remember { mutableStateListOf("Shellforge Terminal") }
+    var command by remember { mutableStateOf("") }
+    val listState = rememberLazyListState()
+    val coroutineScope = rememberCoroutineScope()
+    val homeDirectory = remember(appFilesDir) {
+        File(appFilesDir, "home").apply { mkdirs() }
+    }
+    val session = remember(homeDirectory) {
+        TerminalSession(
+            workingDirectory = homeDirectory,
+            onOutput = { output -> lines.add(output) },
+            onExit = { }
         )
     }
-    var command by remember { mutableStateOf("") }
+
+    LaunchedEffect(session) {
+        session.start()
+    }
+
+    DisposableEffect(session) {
+        onDispose { session.dispose() }
+    }
+
+    LaunchedEffect(lines.size) {
+        if (lines.isNotEmpty()) {
+            listState.animateScrollToItem(lines.lastIndex)
+        }
+    }
+
+    fun submitCommand() {
+        val entered = command
+        if (entered.isNotBlank()) {
+            lines.add("shellforge@android:~$ $entered")
+            session.execute(entered)
+            command = ""
+            coroutineScope.launch {
+                if (lines.isNotEmpty()) listState.animateScrollToItem(lines.lastIndex)
+            }
+        }
+    }
 
     Surface(modifier = Modifier.fillMaxSize(), color = Color(0xFF101010)) {
         Column(
@@ -68,6 +106,7 @@ private fun ShellforgeTerminal() {
             )
 
             LazyColumn(
+                state = listState,
                 modifier = Modifier.weight(1f).fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
@@ -88,7 +127,7 @@ private fun ShellforgeTerminal() {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "user@ubuntu:~$ ",
+                    text = "$ ",
                     color = Color(0xFF8BC34A),
                     fontFamily = FontFamily.Monospace,
                     fontSize = 14.sp
@@ -99,13 +138,7 @@ private fun ShellforgeTerminal() {
                     modifier = Modifier.weight(1f),
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
-                    keyboardActions = KeyboardActions(onSend = {
-                        if (command.isNotBlank()) {
-                            lines.add("user@ubuntu:~$ $command")
-                            lines.add("Ubuntu shell is not connected yet.")
-                            command = ""
-                        }
-                    }),
+                    keyboardActions = KeyboardActions(onSend = { submitCommand() }),
                     textStyle = androidx.compose.ui.text.TextStyle(
                         color = Color.White,
                         fontFamily = FontFamily.Monospace,
