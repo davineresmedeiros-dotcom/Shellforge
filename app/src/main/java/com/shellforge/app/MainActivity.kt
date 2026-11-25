@@ -127,7 +127,7 @@ private fun ShellforgeTerminal(appFilesDir: File) {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "\\$ ",
+                    text = "\$ ",
                     color = Color(0xFF8BC34A),
                     fontFamily = FontFamily.Monospace,
                     fontSize = 14.sp
