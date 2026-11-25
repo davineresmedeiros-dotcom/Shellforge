@@ -47,7 +47,6 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
-import androidx.lifecycle.compose.LocalLifecycleOwner
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.rememberCoroutineScope
 import java.io.File
@@ -91,7 +90,7 @@ private fun ShellforgeTerminal(activity: MainActivity, appFilesDir: File) {
     var storageAccess by remember { mutableStateOf(activity.hasStorageAccess()) }
     val listState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
-    val lifecycleOwner = LocalLifecycleOwner.current
+    val lifecycleOwner = activity
     val legacyStoragePermission = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) {
